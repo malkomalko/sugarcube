@@ -80,9 +80,12 @@ Examples
 100.0.percent # => 1.00
 55.0.percent # => 0.55
 
-1.3.seconds.later do
-  @someview.fade_out
-end
+# convert to radians.  does this look weird?
+180.degrees # => Math::PI
+
+# convert multiples of pi
+2.pi   # => 2 * Math::PI
+0.5.pi # => 0.5 * Math::PI
 ```
 
  NSDate
@@ -93,10 +96,10 @@ That's the good news.  The bad news?  That still doesn't help a lot with some of
 the everyday date&time crap we have to deal with. (I hate dates, especially
 recurring events)
 
-1. Adds the following methods to get date and time components: `date, time, datetime`.
+1. Adds the following methods to get date and time components: `date_array, time_array, datetime_array`.
 
    These methods return arrays.  Comparing dates, times, or both become
-   simple `date1.date == date2.date`.
+   simple `date1.date_array == date2.date_array`.
 2. While I would love to support `date + 1.month` and have that support "smart"
    calendar math (e.g. "2/13/2013" + 1.month => "3/13/2013"), I can't fudge with
    the return value of `1.month` (=> `Fixnum`), and I won't make the terrible
@@ -110,11 +113,11 @@ recurring events)
 ```
 (main)> now = NSDate.new  # Time.new is the same thing
 => 2012-09-13 09:19:06 -0600
-(main)> now.date
+(main)> now.date_array
 => [2012, 9, 13]
-(main)> now.time
+(main)> now.time_array
 => [9, 19, 6]
-(main)> now.datetime
+(main)> now.datetime_array
 => [2012, 9, 13, 9, 19, 6]
 ```
 
@@ -154,33 +157,58 @@ the offset in hours.  `utc_offset` is built into `Time`, not added by SugarCube.
 The `delta` method is smart.
 
 ```ruby
-(main)> feb_28_2012_stamp = 1330473600  # what, you don't have this memorized?
-=> 1330473600
-(main)> feb_28_2012 = Time.at(feb_28_2012_stamp)
+(main)> feb_28_2012 = Time.at(1330473600)
 => 2012-02-28 17:00:00 -0700
 
+# add an hour or two
 (main)> feb_28_2012.delta(hours:1)
 => 2012-02-28 18:00:00 -0700
 (main)> feb_28_2012.delta(hours:2)
 => 2012-02-28 19:00:00 -0700
 
+# add some days
 (main)> feb_28_2012.delta(days:1)
 => 2012-02-29 17:00:00 -0700
 (main)> feb_28_2012.delta(days:2)
 => 2012-03-01 17:00:00 -0700
 
+# how about a month?
 (main)> feb_28_2012.delta(months:1)
 => 2012-03-28 17:00:00 -0600  # look, the time didn't change, event though there was a DST change!
+
+# cool, but if you want a more literal "24 hours", specify a time unit
 (main)> feb_28_2012.delta(months:1, hours:0)
 => 2012-03-28 18:00:00 -0600  # disable the DST fix by specifying hours, minutes, or seconds (a "precise" delta)
 
+# in one year, it will still be Feb 28th
 (main)> feb_28_2012.delta(years:1)
 => 2013-02-28 17:00:00 -0700
+
+# and we already know what adding a day looks like
+(main)> feb_28_2012.delta(days:1)
+=> 2012-02-29 17:00:00 -0700
+
+# a year and a day is tricky, because do we add a day, then a year?  or add a
+# year and then a day?  well, i'll tell you, **I** add a day and then a year,
+# which is feb 29th, which is no good, and the algorithm rolls back days to the
+# last day of the month, so we get the 28th.
 (main)> feb_28_2012.delta(days:1, years:1)
 => 2013-02-28 17:00:00 -0700
+
+# adding 2 days puts us into March, which then "looks right", but it's both
+# right AND wrong, depending on how you look at it.  Another example is below,
+# where we add a month to January 30th.  Really, though, think of this: how
+# often do you need to add a year AND a day!?  Adding a year is more common, and
+# this is showing that adding a year to Feb 29th will give you Feb 28th, which I
+# think is better than March 1st.
+(main)> feb_28_2012.delta(days:2, years:1)
+=> 2013-03-01 17:00:00 -0700
+
+# Crazier: add a day (fab 29th), then a month (march 29th), THEN a year.
 (main)> feb_28_2012.delta(days:1, years:1, months:1)
 => 2013-03-29 17:00:00 -0600
 
+# k, for the next examples, we need a new date, and this is a non-leap year.
 (main)> jan_29_2013 = feb_28_2012.delta(days:1, months:11)
 => 2013-01-29 17:00:00 -0700
 
@@ -188,19 +216,22 @@ The `delta` method is smart.
 (main)> jan_29_2013.delta(months:2)
 => 2013-03-29 17:00:00 -0600
 
-# yeah, smart guy? well then what is 1/29/2013 plus ONE month.
-# it's feb 28th.  trust me.  when someone says "see you in a month!"
-# they mean "next month", not "in the early part of two months in the future",
-# which is where the math will take you if you don't add a "day of month" correction.
+# Yeah, smart guy?  Well then what is 1/29/2013 plus ONE month. It's feb 28th.
+# When someone says "see you in a month!" they mean "next month", not "in the
+# early part of two months in the future", which is where the math will take you
+# if you don't add a "day of month" correction.
 (main)> jan_29_2013.delta(months:1)
 => 2013-02-28 17:00:00 -0700
+# but last year was a leap year, so we should get Feb 29th, 2012:
+(main)> jan_29_2013.delta(months:1, years: -1)
+=> 2012-02-29 17:00:00 -0700  # success!
 
-# does it work in reverse?  fuuuuuu...
+# do other deltas work in reverse?  fuuuuuu...
 (main)> jan_29_2013.delta(months:-11)
 => 2012-02-29 17:00:00 -0700
 # ...ck yeah!  :-)
 
-# unfortunately you will end up with stuff like this:
+# unfortunately you will, in the edge cases, end up with stuff like this:
 (main)> feb_28_2012 == feb_28_2012.delta(days:1, months:12).delta(months:-12)
 => true
 ```
@@ -273,7 +304,7 @@ This is the "big daddy".  Lots of sugar here...
 :rounded.uibuttontype  # => UIButtonTypeRoundedRect
 :highlighted.uicontrolstate  # => UIControlStateHighlighted
 :touch.uicontrolevent  # => UIControlEventTouchUpInside
-:changed.uicontrolevent  # => UIControlEventValueChanged
+:change.uicontrolevent  # => UIControlEventValueChanged
 :all.uicontrolevent  # => UIControlEventAllEvents
 :blue.uicolor  # UIColor.blueColor
 # all CSS colors are supported, and alpha
@@ -441,6 +472,31 @@ button.off(:all)
 You can only remove handlers by "type", not by the action.  e.g. If you bind
 three `:touch` events, calling `button.off(:touch)` will remove all three.
 
+ UIViewController
+------------------
+
+It is nice that *any* `UIViewController` can present a modal, but if you have
+tabs or navs or crap in the way, this is actually *NOT* what you want.  You
+should use the `rootViewController` (whatever it may be) to present to modal.
+
+And since this is a property on `UIWindow`, which is more-or-less a constant, we
+can make this the easiest to do!
+
+```ruby
+include SugarCube::Modal
+view_ctlr = EditSomethingViewController.new
+present_modal(view_ctlr)
+# ...later, when all is well...
+dismiss_modal
+```
+
+These accept completion blocks:
+
+```ruby
+present_modal(view_ctlr) { puts "here!" }
+dismiss_modal { puts "gone!" }
+```
+
  UINavigationController
 ------------------------
 
@@ -475,6 +531,37 @@ tabbar_ctlr.setViewControllers(controllers, animated: true)
 tabbar_ctlr << new_ctlr
 ```
 
+ UITextView
+------------
+
+Added some `UIControl`-like event binding.  You MUST call the `off` methods,
+because these methods use `NSNotification`s, and you must turn off listeners.
+
+There are two aliases for each event. I prefer the present tense (jQuery-style `on :change`),
+but UIKit prefers past simple (`UITextViewTextDidBeginEditingNotification`).
+
+So these are all the same:
+
+    :editing_did_begin  :begin
+    :editing_did_change :change
+    :editing_did_end    :end
+
+```ruby
+text_view = UITextView.new
+text_view.on :editing_did_begin do
+  p 'wait for it...'
+end
+text_view.on :editing_did_change do
+  p text_view.text
+end
+text_view.on :editing_did_end do
+  p 'done!'
+end
+
+# later... like in `viewWillDisappear`.  I'll use the alternative aliases here
+text_view.off :change, :end, :begin
+```
+
  NSNotificationCenter
 ----------------------
 
@@ -488,9 +575,11 @@ Makes it easy to post a notification to some or all objects.
 
 # very similar to add or remove an observer
 "my notification".add_observer(observer, :method_name)
-"my notification".add_observer(observer, :method_name, target)
+"my notification".add_observer(observer, :method_name, object)
+
+# remove the observer
 "my notification".remove_observer(observer)
-"my notification".remove_observer(observer, target)
+"my notification".remove_observer(observer, object)
 ```
 
  NSTimer
@@ -744,8 +833,66 @@ Assume I ran `include SugarCube::Adjust` in these examples.
 
 # if you forget what view you are adjusting, run `adjust` again
 > a
-=> {UITextField @ x: 46.0 y:214.0, 280.0×33.0} child of UIView
+=> UITextField(#9ce6470, {{46, 214}, {280, 33}},  child of UIView(#10a6da20)
 ```
+
+The most useful feature of the REPL adjustment is the ability to quickly
+position and size your UI elements __visually__ and then paste the final values
+into your code.  In order to better accomodate that, `adjust` has an option to
+modify the output format.
+
+This better facilitates copy/paste of the values.  Currently supported is:
+* Default (RubyMotion) (`nil`, `:default`)
+* Objective-C (`:objc`)
+* JSON (`:json`)
+
+#### Objective-C style
+
+```
+(UIImageView(#8d67e00, {{0, 0},...)> tree
+  0: . UIWindow(#6e27180: {{0, 0}, {320, 480}})
+  1: `-- UIView(#8d631b0: {{0, 20}, {320, 460}})
+  2:     +-- UIButton(#6d6c090: {{10, 10}, {320, 463.401}})
+  3:     |   `-- UIImageView(#8d67e00: {{0, 0}, {320, 463.401}})
+  4:     `-- UIRoundedRectButton(#8d68170: {{10, 30}, {30, 200}})
+  5:         `-- UIButtonLabel(#8d69c30: {{2, 90}, {26, 19}})
+=> UIWindow(#6e27180, {{0, 0}, {320, 480}},
+
+# you can pass the format into the adjust method:
+(UIImageView(#8d67e00, {{0, 0},...)> a 4, :objc
+=> "UIRoundedRectButton(#8d68170: [[10.0, 30.0], [200.0, 30.0]])"
+
+# or you can assign repl_format explicitly (adjust does this for you when you hand it a format)
+(UIImageView(#8d67e00, {{0, 0},...)> repl_format :objc
+=> :objc
+
+# either way, it will continue to be used in subsequent calls
+(UIImageView(#8d67e00, {{0, 0},...)> wider 15
+[[10.0, 30.0], [200.0, 45.0]]
+=> "UIRoundedRectButton(#8d68170: [[10.0, 30.0], [200.0, 45.0]]) child of UIView(#8d631b0)"
+```
+
+#### JSON (or GeoMotion)
+
+```
+(UIImageView(#8d67e00, {{0, 0},...)> a 1, :json
+=> "UIView(#8d631b0: [x: 0.0, y: 20.0, height: 460.0, width: 320.0])"
+(UIImageView(#8d67e00, {{0, 0},...)> wider 30
+=> "CGRect(#6e9c9f0: [x: 0.0, y: 20.0, height: 460.0, width: 350.0])"
+(UIImageView(#8d67e00, {{0, 0},...)> right 130
+=> "CGRect(#8dc6a40: [x: 130.0, y: 20.0, height: 460.0, width: 350.0])"
+(UIImageView(#8d67e00, {{0, 0},...)> tree
+  0: . UIWindow(#6e27180: [x: 0.0, y: 0.0, height: 480.0, width: 320.0])
+  1: `-- UIView(#8d631b0: [x: 130.0, y: 20.0, height: 460.0, width: 350.0])
+  2:     +-- UIButton(#6d6c090: [x: 10.0, y: 10.0, height: 463.400512695312, width: 320.0])
+  3:     |   `-- UIImageView(#8d67e00: [x: 0.0, y: 0.0, height: 463.400512695312, width: 320.0])
+  4:     `-- UIRoundedRectButton(#8d68170: [x: 10.0, y: 30.0, height: 200.0, width: 45.0])
+  5:         `-- UIButtonLabel(#8d69c30: [x: 4.0, y: 90.0, height: 19.0, width: 37.0])
+=> UIWindow(#6e27180, {{0, 0}, {320, 480}},
+```
+
+Note: The `format` parameter can be passed as either a symbol or a string
+
 
  Pointers
 ----------
